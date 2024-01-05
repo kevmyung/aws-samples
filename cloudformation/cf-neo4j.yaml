@@ -1,0 +1,160 @@
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.xlarge
+    ConstraintDescription: Please choose a valid instance type.
+  AMIID:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
+Resources:
+  Neo4jVPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      Tags:
+        - Key: Name
+          Value: !Sub "Neo4j-VPC-${AWS::StackName}"
+
+  Neo4jSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      CidrBlock: "10.0.0.0/24"
+      Tags:
+        - Key: Name
+          Value: !Sub "Neo4j-Subnet-${AWS::StackName}"
+
+  Neo4jInternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "Neo4j-IGW-${AWS::StackName}"
+
+  Neo4jInternetGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      InternetGatewayId: !Ref Neo4jInternetGateway
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      Tags:
+        - Key: Name
+          Value: !Sub "Neo4j-RT-${AWS::StackName}"
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref Neo4jInternetGateway
+
+  Neo4jSubnetRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref Neo4jSubnet
+      RouteTableId: !Ref Neo4jRouteTable
+
+  Neo4jSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      GroupDescription: "Security Group for EC2 Instance"
+      SecurityGroupIngress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "tcp"
+          FromPort: 7474
+          ToPort: 7474
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "tcp"
+          FromPort: 7687
+          ToPort: 7687
+      Tags:
+        - Key: Name
+          Value: !Sub "Neo4j-SG-${AWS::StackName}"
+
+  Neo4jSSMInstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "ec2.amazonaws.com"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  Neo4jInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles:
+        - !Ref Neo4jSSMInstanceRole
+
+  Neo4jInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref AMIID
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: '50'
+            DeleteOnTermination: 'true'
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet: 
+            - Ref: "Neo4jSecurityGroup"
+          SubnetId: 
+            Ref: "Neo4jSubnet"
+      IamInstanceProfile: !Ref Neo4jInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y openjdk-11-jdk
+
+          curl -fsSL https://debian.neo4j.com/neotechnology.gpg.key | gpg --dearmor -o /usr/share/keyrings/neo4j.gpg
+          echo "deb [signed-by=/usr/share/keyrings/neo4j.gpg] https://debian.neo4j.com stable 5" | tee -a /etc/apt/sources.list.d/neo4j.list
+
+          apt-get update -y
+          apt-get install -y neo4j=1:5.14.0 unzip
+          systemctl enable --now neo4j
+
+          sed -i 's/#* *server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/' /etc/neo4j/neo4j.conf
+          echo "dbms.security.procedures.unrestricted=apoc.*, dbs.*" | tee -a /etc/neo4j/neo4j.conf
+          echo "dbms.unmanaged_extension_classes=n10s.endpoint=/rdf" | tee -a /etc/neo4j/neo4j.conf 
+
+          # Installation
+          curl -LJO https://github.com/neo4j/apoc/releases/download/$(neo4j --version)/apoc-$(neo4j --version)-core.jar
+          curl -LJO https://github.com/neo4j-labs/neosemantics/releases/download/$(neo4j --version)/neosemantics-$(neo4j --version).jar
+          mv apoc-$(neo4j --version)-core.jar neosemantics-$(neo4j --version).jar /var/lib/neo4j/plugins/
+          wget "https://graphdatascience.ninja/neo4j-graph-data-science-2.5.5.zip"
+          unzip neo4j-graph-data-science-2.5.5.zip
+          cp neo4j-graph-data-science-2.5.5.jar /var/lib/neo4j/plugins/
+          
+          systemctl restart neo4j
+
+          hostnamectl set-hostname my-neo4j     
+          echo "$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4) myneo4j" | tee -a /etc/hosts
+          reboot
+      Tags:
+        - Key: Name
+          Value: !Sub "Neo4j-EC2-${AWS::StackName}"
+
+Outputs:
+  EC2PublicIP:
+    Value: !GetAtt Neo4jInstance.PublicIp
+    Description: "Public IP address of the EC2 instance"
