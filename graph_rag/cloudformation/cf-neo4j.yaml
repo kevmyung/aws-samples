@@ -70,14 +70,17 @@ Resources:
           IpProtocol: "tcp"
           FromPort: 22
           ToPort: 22
+          Description: "Allow SSH access from any IP"
         - CidrIp: "0.0.0.0/0"
           IpProtocol: "tcp"
           FromPort: 7474
           ToPort: 7474
+          Description: "Allow Neo4j Web UI access from any IP"
         - CidrIp: "0.0.0.0/0"
           IpProtocol: "tcp"
           FromPort: 7687
           ToPort: 7687
+          Description: "Allow Neo4j Bolt protocol access from any IP"
       Tags:
         - Key: Name
           Value: !Sub "Neo4j-SG-${AWS::StackName}"
