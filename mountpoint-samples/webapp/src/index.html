@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Image Resizing Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    #uploadForm {
+      margin-bottom: 20px;
+    }
+    #messageBox {
+      margin: 20px 0;
+      color: #d9534f;
+    }
+    #gallery {
+      margin-top: 20px;
+      text-align: left;
+      display: inline-block;
+    }
+    #gallery h2 {
+      margin-top: 0;
+    }
+    a {
+      margin-right: 10px;
+    }
+  </style>
+  <script>
+    function uploadImage(e) {
+      e.preventDefault();
+  
+      var formData = new FormData(document.getElementById('uploadForm'));
+      var messageBox = document.getElementById('messageBox');
+      messageBox.innerText = 'Uploading...';
+  
+      fetch('http://{ip_address}:30001/upload', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Upload failed');
+        }
+        return response.text();
+      })
+      .then(data => {
+        console.log(data);
+        messageBox.innerText = 'Upload successful!';
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        messageBox.innerText = 'Failed to upload image.';
+      });
+    }
+    function loadImages() {
+      fetch('http://{ip_address}:30001/images')
+        .then(response => response.json())
+        .then(data => {
+          const gallery = document.getElementById('gallery');
+          gallery.innerHTML = '<h2>Uploaded Images</h2>';
+          data.uploadFiles.forEach(file => {
+            const link = document.createElement('a');
+            link.href = `http://{ip_address}:30001/uploads/${file}`;
+            link.target = '_blank';
+            link.innerText = file;
+            gallery.appendChild(link);
+            gallery.appendChild(document.createElement('br'));
+          });
+
+          gallery.innerHTML += '<h2>Resized Images</h2>';
+          data.resizedFiles.forEach(file => {
+            const link = document.createElement('a');
+            link.href = `http://{ip_address}:30001/resized/${file}`;
+            link.target = '_blank';
+            link.innerText = file;
+            gallery.appendChild(link);
+            gallery.appendChild(document.createElement('br'));
+          });
+        })
+        .catch(error => console.error('Error loading images:', error));
+    }
+  </script>
+</head>
+<body>
+  <h1>Upload an Image (jpg)</h1>
+  <form id="uploadForm" enctype="multipart/form-data" onsubmit="uploadImage(event)">
+    <input type="file" name="image" accept="image/*">
+    <input type="submit" value="Upload">
+  </form>
+  <div id="messageBox"></div>
+  <button onclick="loadImages()">Check Images</button>
+  <div id="gallery"></div>
+</body>
+</html>

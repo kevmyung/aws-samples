@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-fe
+spec:
+  type: NodePort
+  selector:
+    app: app-fe
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-be
+spec:
+  type: NodePort
+  selector:
+    app: app-be
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+    nodePort: 30001
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-fe
+  labels:
+    app: app-fe
+spec:
+  containers:
+  - name: nginx-container
+    image: nginx:latest
+    volumeMounts:
+    - name: web-content
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: web-content
+    configMap:
+      name: web-page
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-be
+  labels:
+    app: app-be
+spec:
+  initContainers:
+  - name: install-modules
+    image: node:latest
+    volumeMounts:
+    - name: node-modules
+      mountPath: /usr/src/app/node_modules
+    command: ['sh', '-c', 'cd /usr/src/app && npm install express multer sharp cors']
+  containers:
+  - name: nodejs-container
+    image: node:latest
+    volumeMounts:
+    - name: node-modules
+      mountPath: /usr/src/app/node_modules
+    - name: app-code
+      mountPath: /usr/src/app
+    - name: image-storage
+      mountPath: /app/images
+    command: ["node", "/usr/src/app/app-1.js"]
+  volumes:
+  - name: node-modules
+    emptyDir: {}
+  - name: app-code
+    configMap:
+      name: image-app
+  - name: image-storage
+    persistentVolumeClaim:
+      claimName: s3-pvc
