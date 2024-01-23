@@ -1,0 +1,24 @@
+import flask, os
+from inference import model_fn, input_fn, predict_fn, output_fn
+
+app = flask.Flask(__name__)
+
+model_dir = '/opt/ml/model/v1/'
+model = model_fn(model_dir)
+
+@app.route('/ping', methods=["GET"])
+def ping():
+    if model is None:
+        return flask.Response(status=503)
+    return flask.Response(status=200)
+
+@app.route('/invocations', methods=["POST"])
+def invocations():
+    input_data = input_fn(flask.request.data, flask.request.content_type)
+    predictions = predict_fn(input_data, model)
+    print("predictions:", predictions)
+    result = output_fn(predictions, 'application/json')
+    return flask.Response(response=result, status=200, mimetype='application/json')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)

@@ -1,0 +1,8 @@
+Flask
+konlpy
+keras
+tensorflow
+scikit-learn
+pandas
+numpy
+boto3
