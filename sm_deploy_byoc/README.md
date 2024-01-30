@@ -2,6 +2,13 @@
 
 샘플 모델을 커스텀 컨테이너 기반 SageMaker Endpoint에 배포하기
 
+## 0. Large File Download
+```bash
+$ git lfs install
+
+$ git lfs pull
+```
+
 ## 1. Directory and File Structure
 
 - `Dockerfile` : Defines the Docker image build specifications.
