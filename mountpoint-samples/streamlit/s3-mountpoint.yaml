@@ -9,12 +9,13 @@ spec:
     - ReadWriteMany
   mountOptions:
     - allow-overwrite
+    - allow-delete
     - region us-east-1
   csi:
     driver: s3.csi.aws.com
     volumeHandle: s3-csi-driver-volume
     volumeAttributes:
-      bucketName: s3-mountpoint-327270246675
+      bucketName: #{bucket-name}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

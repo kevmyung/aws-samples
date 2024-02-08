@@ -26,7 +26,8 @@ spec:
     spec:
       containers:
       - name: my-app
-        image: 327270246675.dkr.ecr.us-east-1.amazonaws.com/my-app-repo:latest
+        image: #{ecr_image_uri}
+        imagePullPolicy: Always
         ports:
         - containerPort: 8501
         volumeMounts:
